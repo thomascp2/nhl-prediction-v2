@@ -1,0 +1,1292 @@
+# NHL PREDICTION SYSTEM V2.0 - PROJECT BIBLE
+**"Building It Right, Not Easy"**
+
+**Last Updated:** November 4, 2025  
+**Status:** Week 1 - Planning Complete, Ready to Build  
+**Current Phase:** Backtest Validation
+
+---
+
+## ðŸŽ¯ EXECUTIVE SUMMARY
+
+We are building a machine learning system to predict NHL player prop outcomes (points, shots, goals) for betting on PrizePicks. After discovering our V1.0 system had fatal flaws (trained on ungraded predictions, arbitrary probability assignments), we're rebuilding from scratch with proper methodology.
+
+**Core Insight:** Points Over 0.5 is a BINARY event (scored or didn't), fundamentally different from CONTINUOUS stats like shots. This requires separate modeling approaches and unlocks powerful new features like streaks, momentum, and opponent "boom/bust" patterns.
+
+**Strategy:** Hybrid approach - backtest on October data to validate, then collect clean forward data for 8 weeks before training production ML models.
+
+**Timeline:** 10 weeks to production ML, 15 weeks to proven profitability
+
+---
+
+## ðŸ“š TABLE OF CONTENTS
+
+1. [Project Context & History](#project-context--history)
+2. [The Critical Problem We Discovered](#the-critical-problem-we-discovered)
+3. [The Rebuild Strategy](#the-rebuild-strategy)
+4. [Binary vs Continuous Modeling](#binary-vs-continuous-modeling)
+5. [Complete Feature Set (50+ Features)](#complete-feature-set-50-features)
+6. [10-Week Implementation Timeline](#10-week-implementation-timeline)
+7. [Phase 1: Backtest Validation (Week 1)](#phase-1-backtest-validation-week-1)
+8. [Phase 2: Data Collection (Weeks 2-9)](#phase-2-data-collection-weeks-2-9)
+9. [Phase 3: ML Training (Week 10)](#phase-3-ml-training-week-10)
+10. [Phase 4: Production & Retraining (Week 11+)](#phase-4-production--retraining-week-11)
+11. [Technical Architecture](#technical-architecture)
+12. [Data Flow & Database Schema](#data-flow--database-schema)
+13. [Anti-Patterns & Safeguards](#anti-patterns--safeguards)
+14. [Success Metrics & KPIs](#success-metrics--kpis)
+15. [Files to Create](#files-to-create)
+16. [Current System State (What to Keep)](#current-system-state-what-to-keep)
+17. [AI Prompt for New Instances](#ai-prompt-for-new-instances)
+
+---
+
+## ðŸ“– PROJECT CONTEXT & HISTORY
+
+### **What We Built (V1.0):**
+
+A comprehensive NHL prediction system with:
+- âœ… Database infrastructure (`nhl_predictions.db`)
+- âœ… Data collection (PrizePicks lines, player stats, game logs)
+- âœ… Three prediction models (Statistical, Ensemble, Goalie)
+- âœ… Auto-grading system
+- âœ… Market vs Model comparison
+- âœ… Stars filter (50 elite players)
+- âœ… Complete workflow automation
+
+**Paper Trading Results (October-November):**
+- Generated 100+ predictions daily
+- Overall hit rate: 40-50% (TERRIBLE - should be 55-60%)
+- Model was wildly overconfident (95% predictions hitting 40%)
+- After recalibration: Generated 0 bets (too conservative)
+
+---
+
+## ðŸš¨ THE CRITICAL PROBLEM WE DISCOVERED
+
+### **Fatal Flaw #1: Trained on Garbage Data**
+
+```python
+# What we did (WRONG):
+predictions = generate_predictions()  # Made up probabilities
+model.fit(predictions, predictions)  # Trained on our own guesses!
+
+# Garbage in = Garbage out
+```
+
+**The issue:** Models were trained on UNGRADED predictions, not actual results. We were teaching the model to mimic our arbitrary rules, not to predict reality.
+
+### **Fatal Flaw #2: Manual Probability Assignments**
+
+```python
+# V1.0 "Statistical Model" (NOT ACTUALLY STATISTICAL):
+if player.ppg >= 1.5:
+    probability = 0.95  # Why 95%? We made it up!
+elif player.ppg >= 1.0:
+    probability = 0.70  # Why 70%? Also made up!
+
+# This isn't statistics, it's arbitrary rules
+```
+
+**The issue:** Used if-then rules instead of proper statistical distributions (Poisson, Normal).
+
+### **Fatal Flaw #3: Wrong Modeling Approach**
+
+We treated all props the same way, but they're fundamentally different:
+
+**Points Over 0.5:**
+- Binary event (scored or didn't score)
+- Don't care if they score 1 point or 5 points
+- Should use binary classification
+- Unlocks streak/momentum features
+
+**Shots Over 2.5, 3.5, 4.5:**
+- Continuous distribution (how many shots?)
+- Care about exact number
+- Should use regression + distribution
+- Uses different features
+
+**We were using continuous modeling for binary events - WRONG!**
+
+---
+
+## ðŸŽ¯ THE REBUILD STRATEGY
+
+### **Core Principles:**
+
+1. **Proper Statistics:** Use Poisson/Normal distributions, not if-then rules
+2. **Clean Data:** Train only on GRADED predictions
+3. **Binary vs Continuous:** Model points differently than shots
+4. **Feature Engineering:** 50+ features focused on patterns, streaks, momentum
+5. **Validation First:** Backtest before committing 8 weeks
+6. **Conservative Learning:** Cap probabilities at 30-70% during data collection
+7. **No Peeking:** Strict temporal discipline (no data leakage)
+
+### **Three-Phase Approach:**
+
+**Phase 1 (Week 1):** Backtest October data to validate approach
+**Phase 2 (Weeks 2-9):** Collect clean forward data (500+ samples)
+**Phase 3 (Week 10):** Train production ML on 1,000 samples
+**Phase 4 (Week 11+):** Deploy ML, retrain weekly
+
+---
+
+## ðŸ”¬ BINARY vs CONTINUOUS MODELING
+
+### **THE KEY INSIGHT**
+
+**User's realization:**
+> "For points, we only care if they scored or didn't score (binary). This is fundamentally different than shots where we care how many. This opens up a world of new features like hot streaks, cold streaks, games between successes, opponent boom/bust patterns."
+
+**This changed everything.**
+
+---
+
+### **Points Over 0.5 (Binary Classification)**
+
+**Nature of the Problem:**
+```python
+# Binary outcome
+Game 1: 0 points â†’ 0 (failure)
+Game 2: 1 point  â†’ 1 (success)
+Game 3: 3 points â†’ 1 (success)  # Same as 1 point!
+Game 4: 0 points â†’ 0 (failure)
+
+Binary sequence: [0, 1, 1, 0]
+Success rate: 50%
+```
+
+**Model Type:**
+- XGBoost Binary Classifier
+- Target: `scored_1plus_points` (True/False)
+- Output: Probability of scoring 1+ points
+
+**Key Features:**
+- Success rate (scoring percentage)
+- Current streak (+3 or -2)
+- Max hot/cold streaks
+- Games between successes
+- Clustering coefficient (streaky vs consistent)
+- Recent momentum
+- Opponent allow patterns
+- Opponent boom/bust tendencies
+
+**Why This Works:**
+- Captures momentum effects (hot hand)
+- Opponent defensive patterns matter
+- Streaks are predictive
+- Binary is simpler, cleaner
+
+---
+
+### **Shots Over 2.5, 3.5, 4.5 (Regression + Distribution)**
+
+**Nature of the Problem:**
+```python
+# Continuous outcome
+Game 1: 2 shots
+Game 2: 4 shots
+Game 3: 3 shots
+Game 4: 1 shot
+
+Mean: 2.5 shots/game
+Std Dev: 1.29
+```
+
+**Model Type:**
+- XGBoost Regressor + Poisson Distribution
+- Target: `total_shots` (integer 0, 1, 2, 3, 4, 5+)
+- Output: Expected shots, then calculate P(>2.5), P(>3.5), P(>4.5)
+
+**Key Features:**
+- Average shots per game
+- Standard deviation (consistency)
+- Recent shot volume trends
+- Opponent shots against
+- Game pace (O/U total)
+- Ice time expectation
+
+**Why This Works:**
+- Poisson models count data naturally
+- Accounts for variance
+- Can predict multiple lines from one distribution
+
+---
+
+## ðŸ“Š COMPLETE FEATURE SET (50+ FEATURES)
+
+### **BINARY FEATURES (For Points Predictions)**
+
+#### **A. Player Success Patterns (15 features)**
+
+```python
+PLAYER_BINARY_FEATURES = {
+    # Success rates
+    'success_rate_season': "Overall scoring % (season)",
+    'success_rate_last_20': "Last 20 games scoring %",
+    'success_rate_last_10': "Last 10 games scoring %",
+    'success_rate_last_5': "Last 5 games scoring %",
+    'success_rate_last_3': "Last 3 games scoring %",
+    
+    # Streaks
+    'current_streak': "Current streak (+N or -N games)",
+    'max_hot_streak': "Longest scoring streak (season)",
+    'max_cold_streak': "Longest scoreless streak (season)",
+    'avg_games_between_scores': "Avg games between scoring",
+    'avg_games_between_failures': "Avg games between scoreless",
+    
+    # Pattern analysis
+    'clustering_coefficient': "How streaky vs consistent",
+    'alternation_rate': "How often alternates success/fail",
+    'momentum_score': "Weighted toward recent games",
+    'variance_in_success': "Predictability measure",
+    'recent_trend': "Upward/downward/stable"
+}
+```
+
+#### **B. Player Context (10 features)**
+
+```python
+PLAYER_CONTEXT_FEATURES = {
+    'ppg': "Points per game average",
+    'ice_time_avg': "Average TOI",
+    'ice_time_trend': "TOI increasing/decreasing",
+    'pp_unit': "Power play unit (1 or 2)",
+    'linemates_quality': "Average PPG of linemates",
+    'position': "Center/Wing/Defense",
+    'home_away': "Home or away game",
+    'back_to_back': "Is this a back-to-back",
+    'rest_days': "Days since last game",
+    'vs_top10_defense_rate': "Success vs elite defenses"
+}
+```
+
+#### **C. Opponent Binary Patterns (15 features)**
+
+```python
+OPPONENT_BINARY_FEATURES = {
+    # Allow rates
+    'opponent_allow_rate_season': "% allowing 1+ point to similar players",
+    'opponent_allow_rate_last_20': "Last 20 games allow rate",
+    'opponent_allow_rate_last_10': "Last 10 games allow rate",
+    'opponent_allow_rate_last_5': "Last 5 games allow rate",
+    
+    # Defensive patterns (THE GOLD!)
+    'opponent_bust_streak_tendency': "When they shutdown, do they stay shutdown?",
+    'opponent_boom_streak_tendency': "When they bleed, do they keep bleeding?",
+    'opponent_volatility': "Predictable vs unpredictable",
+    'opponent_profile': "STREAKY_BOTH, SHUTDOWN_RUNS, BLEEDS_WHEN_CUT, CONSISTENT",
+    'opponent_current_streak': "Current allow/shutdown streak",
+    
+    # Context
+    'opponent_allowed_yesterday': "CRITICAL - Did they allow yesterday?",
+    'opponent_ga_per_game': "Goals against per game",
+    'opponent_pk_pct': "Penalty kill %",
+    'opponent_sa_per_game': "Shots against per game",
+    'opponent_home_away': "Home or away",
+    'opponent_back_to_back': "Are they on B2B?"
+}
+```
+
+#### **D. Matchup-Specific (10 features)**
+
+```python
+MATCHUP_FEATURES = {
+    'vs_opponent_success_rate': "Player's scoring % vs this team",
+    'vs_opponent_last_5': "Last 5 meetings scoring %",
+    'vs_opponent_streak': "Current streak vs this team",
+    'vegas_ou': "Game O/U total",
+    'vegas_ml': "Team moneyline",
+    'vegas_spread': "Puck line spread",
+    'game_importance': "Playoff race relevance",
+    'rivalry_game': "Is this a rivalry?",
+    'goalie_quality': "Opponent goalie save %",
+    'goalie_recent_form': "Goalie last 5 games"
+}
+```
+
+---
+
+### **CONTINUOUS FEATURES (For Shots Predictions)**
+
+```python
+SHOTS_CONTINUOUS_FEATURES = {
+    # Player averages
+    'sog_per_game': "Shots on goal per game",
+    'sog_std_dev': "Shot volume consistency",
+    'sog_last_5_avg': "Recent shot volume",
+    'sog_last_10_avg': "Medium-term trend",
+    'sog_trend': "Increasing/decreasing/stable",
+    
+    # Context
+    'ice_time_avg': "Average TOI",
+    'pp_opportunities': "Expected PP opportunities",
+    'shooting_percentage': "Goals/SOG %",
+    
+    # Opponent
+    'opponent_sa_per_game': "Opponent shots allowed",
+    'opponent_sa_std_dev': "Opponent consistency",
+    'opponent_sv_pct': "Goalie save %",
+    
+    # Game context
+    'vegas_ou': "Game total",
+    'game_pace': "Expected pace"
+}
+```
+
+---
+
+## ðŸ“… 10-WEEK IMPLEMENTATION TIMELINE
+
+### **WEEK 1: BACKTEST VALIDATION (Nov 4-10, 2025)**
+
+**Goal:** Prove binary features are predictive before investing 8 weeks
+
+**Tasks:**
+- [ ] Day 1-2: Build backtest framework
+- [ ] Day 3-4: Run October backtest (Oct 1 - Nov 3)
+- [ ] Day 5: Analyze results, feature importance
+- [ ] Day 6-7: GO/NO-GO decision
+
+**Expected Output:**
+```
+OCTOBER BACKTEST RESULTS
+========================
+Predictions: 850+
+Accuracy: 56-60%
+Top Features: Identified
+Decision: GO or RETHINK
+```
+
+**GO Criteria:**
+- Overall accuracy: â‰¥55%
+- Points (binary): â‰¥58%
+- Shots (distribution): â‰¥54%
+- Feature importance makes sense
+
+**NO-GO Actions:**
+- If <52%: Rethink features entirely
+- If 52-55%: Adjust features, re-backtest
+
+---
+
+### **WEEKS 2-9: DATA COLLECTION (Nov 11 - Jan 5, 2026)**
+
+**Goal:** Build clean, production-quality dataset
+
+**Mode:**
+```python
+LEARNING_MODE = True
+MODEL_TYPE = "statistical_only"  # No ML yet!
+```
+
+**Daily Workflow:**
+
+**Morning (8 AM):**
+```bash
+python auto_grade_yesterday.py
+# Grades all predictions from yesterday
+# Stores in prediction_outcomes table
+# Updates dashboard
+```
+
+**Morning (10 AM):**
+```bash
+python generate_predictions_statistical.py
+# Uses statistical models only (Poisson/Normal)
+# Conservative probabilities (40-70%)
+# Stores in predictions table
+```
+
+**Evening (6 PM - Optional):**
+```bash
+python fetch_prizepicks_lines.py
+python market_vs_model.py
+# Check for edges (paper trade only)
+```
+
+**Weekly (Sunday):**
+```bash
+python weekly_calibration_review.py
+# Review hit rates by tier
+# Check calibration plots
+# Adjust statistical model if needed
+```
+
+**NO ML TRAINING during this phase!**
+
+**Expected Output After 8 Weeks:**
+- October backtest: ~500 samples
+- Nov-Dec forward: ~500 samples
+- Total: ~1,000 graded predictions
+- Ready for ML training
+
+---
+
+### **WEEK 10: ML TRAINING (Jan 6-12, 2026)**
+
+**Goal:** Train production ML models on clean data
+
+**Data Preparation:**
+```bash
+python prepare_training_data.py
+# Extracts all 1,000 graded predictions
+# Splits train/val/test (60/20/20)
+# Train: Oct 1 - Dec 15 (600 samples)
+# Val: Dec 16 - Dec 31 (200 samples)
+# Test: Jan 1 - Jan 15 (200 samples) â† NEVER SEEN
+```
+
+**Model Training:**
+```bash
+# Points (Binary Classification)
+python train_points_binary_model.py
+# - XGBoost Binary Classifier
+# - 50+ binary features
+# - Hyperparameter tuning on validation set
+# - Saves models/points_v1.0.pkl
+
+# Shots (Distribution Model)
+python train_shots_distribution_model.py
+# - XGBoost Regressor + Poisson
+# - Continuous features
+# - Predicts expected shots
+# - Calculates P(>2.5), P(>3.5), P(>4.5)
+# - Saves models/shots_v1.0.pkl
+```
+
+**Validation:**
+```bash
+python validate_models.py
+# Tests on holdout data (Jan 1-15)
+# Compares to statistical baseline
+# Generates performance report
+```
+
+**Deployment Decision:**
+```python
+if ml_test_accuracy > statistical_baseline + 0.03:  # 3% better
+    deploy_ml_models()
+    LEARNING_MODE = False
+    print("âœ… ML models deployed!")
+else:
+    keep_statistical_models()
+    print("âš ï¸ ML not better, keep statistical")
+```
+
+**Expected Results:**
+- ML Test Accuracy: 61-65%
+- Statistical Baseline: 56-58%
+- Improvement: +3-7%
+- Decision: Deploy ML âœ…
+
+---
+
+### **WEEK 11+: PRODUCTION & RETRAINING (Jan 13+)**
+
+**Goal:** Use ML for predictions, continuously improve
+
+**Mode:**
+```python
+LEARNING_MODE = False
+MODEL_TYPE = "ml_production"
+```
+
+**Daily Workflow:**
+
+**Morning (8 AM):**
+```bash
+python auto_grade_yesterday.py
+```
+
+**Morning (10 AM):**
+```bash
+python generate_predictions_ml.py
+# Uses ML models now (not statistical)
+# Full probability range (20-85%)
+# Higher accuracy expected
+```
+
+**Evening (6 PM):**
+```bash
+python fetch_prizepicks_lines.py
+python market_vs_model.py
+# Find +EV edges
+# REAL MONEY bets (if confident)
+```
+
+**Weekly (Sunday):**
+```bash
+python weekly_retrain.py
+# Retrain ML on last 90 days
+# Validate on last 2 weeks
+# Deploy if better than current
+# Log performance metrics
+```
+
+**Retraining Strategy:**
+```python
+class WeeklyRetrainingPipeline:
+    """
+    Retrain models weekly on rolling window
+    """
+    
+    def retrain(self, current_date):
+        # Use last 90 days for training
+        training_data = get_graded_predictions(
+            start=current_date - timedelta(days=90),
+            end=current_date - timedelta(days=1)
+        )
+        
+        # Validate on last 2 weeks
+        val_data = get_graded_predictions(
+            start=current_date - timedelta(days=14),
+            end=current_date - timedelta(days=1)
+        )
+        
+        # Retrain
+        model.fit(X_train, y_train)
+        val_acc = model.score(X_val, y_val)
+        
+        # Only deploy if better
+        if val_acc >= current_model_accuracy:
+            save_model(f"models/model_v{version}.pkl")
+            return True
+        else:
+            return False  # Keep current model
+```
+
+**Expected Results by Week 15:**
+- ML Accuracy: 62-66%
+- ROI: 5-10% (on bets with 10%+ edge)
+- Profitable: âœ…
+
+---
+
+## ðŸ—ï¸ TECHNICAL ARCHITECTURE
+
+### **System Components**
+
+```
+NHL PREDICTION SYSTEM V2.0
+â”œâ”€â”€ Data Collection Layer
+â”‚   â”œâ”€â”€ fetch_prizepicks_current_lines.py (market data)
+â”‚   â”œâ”€â”€ fetch_2025_26_stats.py (player stats)
+â”‚   â”œâ”€â”€ fetch_goalie_stats.py (goalie data)
+â”‚   â”œâ”€â”€ fetch_betting_lines.py (O/U, ML)
+â”‚   â””â”€â”€ update_star_player_logs.py (game logs)
+â”‚
+â”œâ”€â”€ Feature Engineering Layer
+â”‚   â”œâ”€â”€ binary_feature_extractor.py (50+ binary features)
+â”‚   â”œâ”€â”€ continuous_feature_extractor.py (shots features)
+â”‚   â”œâ”€â”€ opponent_pattern_analyzer.py (boom/bust patterns)
+â”‚   â””â”€â”€ matchup_feature_builder.py (head-to-head)
+â”‚
+â”œâ”€â”€ Prediction Layer
+â”‚   â”œâ”€â”€ statistical_predictions_v2.py (Poisson/Normal)
+â”‚   â”œâ”€â”€ ml_predictions_v2.py (XGBoost models)
+â”‚   â””â”€â”€ ensemble_predictions_v2.py (combined)
+â”‚
+â”œâ”€â”€ Validation Layer
+â”‚   â”œâ”€â”€ backtest_framework.py (historical validation)
+â”‚   â”œâ”€â”€ auto_grade_yesterday.py (daily grading)
+â”‚   â””â”€â”€ calibration_monitor.py (track reliability)
+â”‚
+â”œâ”€â”€ Analysis Layer
+â”‚   â”œâ”€â”€ market_vs_model.py (edge finding)
+â”‚   â”œâ”€â”€ feature_importance_tracker.py
+â”‚   â””â”€â”€ performance_analyzer.py
+â”‚
+â”œâ”€â”€ Automation Layer
+â”‚   â”œâ”€â”€ RUN_COMPLETE_DAILY_WORKFLOW.py (orchestrator)
+â”‚   â”œâ”€â”€ weekly_retrain.py (ML retraining)
+â”‚   â””â”€â”€ weekly_review.py (performance review)
+â”‚
+â””â”€â”€ Dashboard Layer
+    â”œâ”€â”€ app.py (Flask web server)
+    â””â”€â”€ templates/
+        â”œâ”€â”€ index.html (main dashboard)
+        â”œâ”€â”€ calibration.html (calibration plots)
+        â””â”€â”€ features.html (feature importance)
+```
+
+---
+
+## ðŸ’¾ DATA FLOW & DATABASE SCHEMA
+
+### **Database: `nhl_predictions.db` (SQLite)**
+
+#### **Table: `predictions`**
+```sql
+CREATE TABLE predictions (
+    id INTEGER PRIMARY KEY,
+    prediction_batch_id TEXT,
+    game_date TEXT,
+    player_name TEXT,
+    team TEXT,
+    opponent TEXT,
+    prop_type TEXT,  -- 'points', 'shots', 'goals'
+    line REAL,  -- 0.5, 2.5, 3.5, 4.5
+    prediction TEXT,  -- 'OVER' or 'UNDER'
+    probability REAL,  -- Model probability
+    confidence_tier TEXT,  -- T1-ELITE, T2-STRONG, etc.
+    model_version TEXT,  -- 'statistical_v1', 'ml_v1.0'
+    reasoning TEXT,  -- Why this prediction
+    
+    -- Features (stored for ML training)
+    features_json TEXT,  -- All features as JSON
+    
+    created_at TIMESTAMP
+);
+```
+
+#### **Table: `prediction_outcomes`**
+```sql
+CREATE TABLE prediction_outcomes (
+    id INTEGER PRIMARY KEY,
+    prediction_id INTEGER,  -- Links to predictions.id
+    game_date TEXT,
+    player_name TEXT,
+    prop_type TEXT,
+    line REAL,
+    predicted_probability REAL,
+    
+    -- Actual results
+    actual_stat_value REAL,  -- Actual points/shots scored
+    outcome TEXT,  -- 'HIT' or 'MISS'
+    
+    -- Grading metadata
+    graded_at TIMESTAMP,
+    
+    FOREIGN KEY (prediction_id) REFERENCES predictions(id)
+);
+```
+
+#### **Table: `model_versions`**
+```sql
+CREATE TABLE model_versions (
+    id INTEGER PRIMARY KEY,
+    version TEXT,  -- 'v1.0', 'v1.1', etc.
+    model_type TEXT,  -- 'points_binary', 'shots_distribution'
+    trained_at TIMESTAMP,
+    training_samples INTEGER,
+    
+    -- Performance metrics
+    train_accuracy REAL,
+    val_accuracy REAL,
+    test_accuracy REAL,
+    
+    -- Model artifacts
+    model_path TEXT,  -- 'models/points_v1.0.pkl'
+    feature_importance_json TEXT,
+    
+    notes TEXT
+);
+```
+
+#### **Table: `feature_importance`**
+```sql
+CREATE TABLE feature_importance (
+    id INTEGER PRIMARY KEY,
+    model_version_id INTEGER,
+    feature_name TEXT,
+    importance_score REAL,
+    rank INTEGER,
+    
+    FOREIGN KEY (model_version_id) REFERENCES model_versions(id)
+);
+```
+
+---
+
+### **Data Flow Diagram**
+
+```
+DAY N (Evening):
+================
+NHL Games â†’ Fetch Game Results
+              â†“
+         [NHL API]
+              â†“
+    actual_stat_value (points/shots)
+              â†“
+    [prediction_outcomes table]
+              â†“
+         Grade predictions
+              â†“
+    Update outcome ('HIT'/'MISS')
+
+
+DAY N+1 (Morning):
+==================
+Player Stats â†’ Feature Extraction â†’ Prediction Generation
+     â†“               â†“                      â†“
+[player_stats]  [features_json]      [predictions]
+     â†“               â†“                      â†“
+Game logs      Binary features       Store in DB
+     â†“               â†“                      â†“
+Opponent data  Continuous features   Export to CSV
+     â†“               â†“                      â†“
+Vegas lines    Matchup features      Show in dashboard
+
+
+DAY N+1 (Evening):
+==================
+[predictions] â†’ Compare to â†’ [prizepicks_lines]
+                    â†“
+              Market vs Model
+                    â†“
+          Calculate edge (%)
+                    â†“
+        Recommend bets (if edge â‰¥10%)
+
+
+WEEK N (Sunday):
+================
+[prediction_outcomes] â†’ ML Training Pipeline
+         â†“
+    Last 90 days data
+         â†“
+    Train/Val split
+         â†“
+    XGBoost training
+         â†“
+    Validate on last 2 weeks
+         â†“
+    Deploy if better
+         â†“
+    [model_versions]
+```
+
+---
+
+## âš ï¸ ANTI-PATTERNS & SAFEGUARDS
+
+### **Critical Rules to Prevent Data Leakage**
+
+#### **1. Temporal Discipline**
+
+```python
+# âŒ WRONG - Future leakage
+def predict_for_game(game_date):
+    player_ppg = get_season_average(player)  # Includes future games!
+    return predict(player_ppg)
+
+# âœ… RIGHT - Point-in-time data
+def predict_for_game(game_date):
+    # Only use data from BEFORE game_date
+    cutoff = game_date - timedelta(days=1)
+    player_ppg = calculate_average_as_of(player, cutoff)
+    return predict(player_ppg)
+```
+
+#### **2. No Training on Test Data**
+
+```python
+# âŒ WRONG - Testing on training data
+train_data = get_all_predictions()  # Oct-Dec
+model.fit(train_data)
+test_accuracy = model.score(train_data)  # Same data!
+
+# âœ… RIGHT - Holdout test set
+train_data = get_predictions('2024-10-01', '2024-12-15')
+val_data = get_predictions('2024-12-16', '2024-12-31')
+test_data = get_predictions('2025-01-01', '2025-01-15')
+
+model.fit(train_data)
+tune_hyperparams(val_data)
+test_accuracy = model.score(test_data)  # Never seen before!
+```
+
+#### **3. No Peeking During Backtest**
+
+```python
+class SafeBacktester:
+    """Prevents accidental cheating during backtest"""
+    
+    def backtest_game_date(self, game_date):
+        # Lock data access to BEFORE game_date
+        self.data_cutoff = game_date - timedelta(days=1)
+        
+        # Extract features (only from allowed data)
+        features = self.extract_features_as_of(self.data_cutoff)
+        
+        # Generate predictions
+        predictions = self.predict(features)
+        
+        # Grade AFTER game_date (can't grade before game happens!)
+        actual_results = self.get_results_after(game_date)
+        graded = self.grade(predictions, actual_results)
+        
+        return graded
+```
+
+---
+
+### **Anti-Patterns to Avoid**
+
+```python
+# âŒ DON'T: Train on ungraded predictions
+predictions = generate_predictions()
+model.fit(predictions, predictions)  # Circular logic!
+
+# âŒ DON'T: Use arbitrary probability rules
+if ppg >= 1.5:
+    prob = 0.95  # Made up number
+
+# âŒ DON'T: Train ML during data collection phase
+# Wait until 500+ clean samples
+
+# âŒ DON'T: Ignore data leakage
+player_avg = player.season_average  # Includes future!
+
+# âŒ DON'T: Overfit to backtest
+# Tune on backtest, test on forward data
+
+# âŒ DON'T: Bet real money during learning mode
+# Paper trade until ML validates
+```
+
+---
+
+### **DO's (Best Practices)**
+
+```python
+# âœ… DO: Use proper statistical distributions
+prob = 1 - poisson.cdf(0.5, player_ppg)
+
+# âœ… DO: Train only on graded predictions
+graded_data = get_graded_predictions()
+model.fit(graded_data)
+
+# âœ… DO: Validate on out-of-sample data
+test_on_future_data(model)
+
+# âœ… DO: Cap probabilities during learning
+if LEARNING_MODE:
+    prob = max(0.30, min(0.70, prob))
+
+# âœ… DO: Track everything
+log_feature_importance()
+log_model_performance()
+log_calibration_curves()
+
+# âœ… DO: Retrain weekly (after initial validation)
+if week >= 11:
+    weekly_retrain()
+```
+
+---
+
+## ðŸ“Š SUCCESS METRICS & KPIs
+
+### **Week 1 (Backtest Validation):**
+```python
+REQUIRED:
+- Total predictions: 800+
+- Overall accuracy: â‰¥55%
+- Points accuracy: â‰¥58%
+- Shots accuracy: â‰¥54%
+
+BONUS:
+- Feature importance makes intuitive sense
+- Calibration error <0.15
+- Clear signal in binary features
+```
+
+### **Week 9 (End of Data Collection):**
+```python
+REQUIRED:
+- Total graded predictions: 1,000+
+- Statistical model accuracy: 56-59%
+- Daily grading success rate: 95%+
+- Feature completeness: 100% (no missing data)
+
+CALIBRATION:
+- Predictions 50-60%: Hit 50-60% âœ…
+- Predictions 60-70%: Hit 60-70% âœ…
+- Brier score: <0.25
+```
+
+### **Week 10 (ML Training):**
+```python
+REQUIRED:
+- ML train accuracy: 60-65%
+- ML validation accuracy: 58-63%
+- ML test accuracy: 57-62%
+- Improvement over baseline: +3-5%
+
+DEPLOYMENT CRITERIA:
+- Test accuracy > Statistical + 3%
+- Validation curve stable (no overfitting)
+- Feature importance reasonable
+- Passes all safeguard checks
+```
+
+### **Week 15 (Production):**
+```python
+TARGET:
+- ML accuracy: 62-66%
+- Edge win rate (â‰¥10% edges): 57-62%
+- ROI: 5-10% (100+ bets)
+- Sharpe ratio: >1.0
+
+SUSTAINABILITY:
+- Weekly retraining improves or maintains accuracy
+- Calibration remains tight (<0.20 Brier)
+- Feature drift detected and handled
+- Profitable over 200+ bets
+```
+
+---
+
+## ðŸ“ FILES TO CREATE
+
+### **Week 1 (Backtest Phase):**
+
+**Core Infrastructure:**
+```
+1. config.py - All system settings
+2. backtest_framework.py - Historical validation engine
+3. binary_feature_extractor.py - 50+ binary features
+4. continuous_feature_extractor.py - Shots features
+5. statistical_predictions_v2.py - Poisson/Normal models
+6. auto_grade_yesterday.py - Grading system
+7. calibration_monitor.py - Track reliability
+```
+
+**Analysis Tools:**
+```
+8. analyze_backtest_results.py - Performance analysis
+9. feature_importance_analyzer.py - Rank features
+10. visualize_calibration.py - Calibration plots
+```
+
+---
+
+### **Week 2+ (Data Collection):**
+
+**Daily Workflow:**
+```
+11. generate_predictions_statistical.py - Daily predictions
+12. weekly_review.py - Sunday performance check
+13. dashboard/app.py - Flask web dashboard
+14. dashboard/templates/index.html - Dashboard UI
+```
+
+**Monitoring:**
+```
+15. data_quality_checker.py - Validate data integrity
+16. missing_data_alert.py - Alert on issues
+```
+
+---
+
+### **Week 10 (ML Training):**
+
+**Training Pipeline:**
+```
+17. prepare_training_data.py - Feature matrix creation
+18. train_points_binary_model.py - Binary classifier
+19. train_shots_distribution_model.py - Regression model
+20. validate_models.py - Holdout validation
+21. deploy_models.py - Production deployment
+```
+
+**ML Utilities:**
+```
+22. hyperparameter_tuner.py - Grid search
+23. model_diagnostics.py - Performance analysis
+24. feature_selection.py - Remove weak features
+```
+
+---
+
+### **Week 11+ (Production):**
+
+**Production System:**
+```
+25. generate_predictions_ml.py - ML-powered predictions
+26. weekly_retrain.py - Continuous improvement
+27. model_performance_tracker.py - Long-term monitoring
+28. alert_system.py - Notify on issues
+```
+
+**Analysis:**
+```
+29. roi_calculator.py - Track profitability
+30. edge_performance_validator.py - Validate edges are real
+31. feature_drift_detector.py - Detect when features change
+```
+
+---
+
+## ðŸ”§ CURRENT SYSTEM STATE (WHAT TO KEEP)
+
+### **KEEP (Working Well):**
+
+**Infrastructure:**
+- âœ… `database/nhl_predictions.db` - Database structure is solid
+- âœ… `fetch_prizepicks_current_lines.py` - Market data fetcher
+- âœ… `fetch_2025_26_stats.py` - Player stats fetcher
+- âœ… `fetch_goalie_stats.py` - Goalie stats
+- âœ… `fetch_betting_lines.py` - Vegas lines (O/U, ML)
+- âœ… `update_star_player_logs.py` - Game log updater
+- âœ… `auto_grade_yesterday.py` - Grading system
+
+**Lists & References:**
+- âœ… `stars_only_filter.py` - 50 stars list (use for betting, not training)
+- âœ… `STARS_CRITERIA_EXPLAINED.md` - Stars documentation
+
+**Workflow:**
+- âœ… `RUN_COMPLETE_DAILY_WORKFLOW.py` - Orchestration structure
+- âœ… Task scheduler setup - Automation framework
+
+**Market Analysis:**
+- âœ… `market_vs_model.py` - Edge finder logic
+
+---
+
+### **REBUILD (Broken):**
+
+**Prediction Models:**
+- âŒ `enhanced_predictions_FIXED_FINAL_FINAL.py` - Arbitrary rules
+- âŒ Statistical model - Not actually statistical
+- âŒ Ensemble model - Trained on garbage data
+- âŒ ML models - Need retraining on clean data
+
+**Replace With:**
+- âœ… `statistical_predictions_v2.py` - Proper Poisson/Normal
+- âœ… `ml_predictions_v2.py` - Clean XGBoost models
+- âœ… `ensemble_predictions_v2.py` - Weighted properly
+
+---
+
+### **FILES IN PROJECT (KEEP AS REFERENCE):**
+
+```
+/mnt/project/
+â”œâ”€â”€ COMPLETE_ANALYSIS_20251102_0830PM.csv (V1.0 output - reference)
+â”œâ”€â”€ COMPLETE_USER_GUIDE_NOV2025.md (V1.0 guide - reference)
+â”œâ”€â”€ DAILY_WORKFLOW_GUIDE.md (workflow structure - keep)
+â”œâ”€â”€ MARKET_VS_MODEL_GUIDE.md (edge finding - keep)
+â”œâ”€â”€ STARS_CRITERIA_EXPLAINED.md (50 stars list - keep)
+â”œâ”€â”€ RUN_COMPLETE_DAILY_WORKFLOW.py (orchestrator - keep structure)
+â”œâ”€â”€ market_vs_model.py (edge finder - keep)
+â””â”€â”€ update_star_player_logs.py (game logs - keep)
+```
+
+---
+
+## ðŸ¤– AI PROMPT FOR NEW INSTANCES
+
+**Copy/paste this to get a new AI instance up to speed:**
+
+```
+I'm working on an NHL player prop betting prediction system (V2.0 rebuild). 
+
+CONTEXT:
+We built V1.0 but discovered it had fatal flaws:
+1. Models trained on ungraded predictions (garbage in = garbage out)
+2. Arbitrary probability assignments instead of real statistics
+3. Treated all props the same (but points are binary, shots are continuous)
+
+CRITICAL INSIGHT:
+Points Over 0.5 is a BINARY event (scored or didn't) - fundamentally different 
+from shots (continuous). Binary modeling unlocks new features: streaks, momentum, 
+opponent "boom/bust" patterns (when they bleed, they keep bleeding).
+
+STRATEGY:
+Week 1: Backtest October data to validate binary approach works
+Weeks 2-9: Collect clean forward data (500+ samples, statistical model only)
+Week 10: Train ML on 1,000 samples (backtest + forward)
+Week 11+: Deploy ML, retrain weekly
+
+TECHNICAL:
+- Points: XGBoost Binary Classifier (50+ binary features)
+- Shots: XGBoost Regressor + Poisson (continuous features)
+- Database: SQLite (nhl_predictions.db)
+- No ML training until Week 10 (avoid data leakage)
+
+CURRENT STATUS:
+Week 1 - Planning complete, ready to build backtest framework
+
+WHAT TO KEEP FROM V1.0:
+âœ… Database infrastructure
+âœ… Data fetchers (PrizePicks, NHL API, player stats)
+âœ… Auto-grading system
+âœ… Market vs Model edge finder
+âœ… 50 stars list (for betting, not training)
+
+WHAT TO REBUILD:
+âŒ Prediction models (use proper statistics)
+âŒ Feature extraction (add binary features)
+âŒ Training pipeline (clean data only)
+
+Please read the file: NHL_PREDICTION_SYSTEM_V2_BIBLE.md
+It contains the complete plan, all features, timeline, and technical details.
+
+I need help with: [YOUR SPECIFIC QUESTION]
+```
+
+---
+
+## ðŸ“ž CONTACT & NEXT STEPS
+
+**Current Phase:** Week 1 - Backtest Validation  
+**Next Action:** Build backtest framework  
+**Decision Point:** End of Week 1 - GO/NO-GO based on backtest results  
+
+**Questions? Start Here:**
+1. Read this bible completely
+2. Review current phase (Week 1)
+3. Check files to create
+4. Reference anti-patterns section
+5. Ask specific questions
+
+---
+
+## ðŸ“š APPENDIX: KEY CONCEPTS
+
+### **Binary Classification vs Regression**
+
+**Binary Classification:**
+- Output: Class probability (0 to 1)
+- Target: True/False, Yes/No, 1/0
+- Example: Will player score? (Yes/No)
+- Model: Logistic Regression, XGBoost Classifier
+- Loss: Log loss, binary cross-entropy
+
+**Regression:**
+- Output: Continuous value
+- Target: Real number (0, 1, 2, 3, ...)
+- Example: How many shots? (3.2 expected)
+- Model: Linear Regression, XGBoost Regressor
+- Loss: MSE, MAE
+
+---
+
+### **Poisson Distribution**
+
+Used for modeling count data (rare events):
+```python
+from scipy.stats import poisson
+
+# Player averages 1.2 points per game
+lambda_param = 1.2
+
+# Probability of scoring MORE than 0.5 points
+prob_over_half = 1 - poisson.cdf(0.5, lambda_param)
+# Result: ~70%
+
+# Probability of scoring MORE than 1.5 points  
+prob_over_1_5 = 1 - poisson.cdf(1.5, lambda_param)
+# Result: ~34%
+```
+
+**When to use:**
+- Count data (0, 1, 2, 3, ...)
+- Rare events
+- Points, goals, assists
+
+---
+
+### **Normal Distribution**
+
+Used for continuous data:
+```python
+from scipy.stats import norm
+
+# Player averages 3.2 shots, std dev 1.1
+mean = 3.2
+std = 1.1
+
+# Probability of MORE than 2.5 shots
+z_score = (2.5 - mean) / std  # -0.636
+prob_over_2_5 = 1 - norm.cdf(z_score)
+# Result: ~74%
+```
+
+**When to use:**
+- Continuous data
+- Symmetric distributions
+- Shots, ice time, blocks
+
+---
+
+### **Calibration**
+
+How well do predicted probabilities match reality?
+
+**Well-calibrated:**
+```
+Predicted 60% â†’ Actually hit 60% âœ…
+Predicted 70% â†’ Actually hit 70% âœ…
+Predicted 80% â†’ Actually hit 80% âœ…
+```
+
+**Poorly calibrated:**
+```
+Predicted 90% â†’ Actually hit 45% âŒ (overconfident)
+Predicted 60% â†’ Actually hit 75% âŒ (underconfident)
+```
+
+**Measure: Brier Score**
+```python
+brier_score = np.mean((predicted_probs - actual_outcomes)**2)
+# Lower is better, 0.25 is acceptable, <0.20 is good
+```
+
+---
+
+### **Expected Value (EV)**
+
+How much you expect to win/lose per bet:
+
+```python
+EV = (Win_Prob Ã— Win_Amount) - (Loss_Prob Ã— Loss_Amount)
+
+# Example:
+# Model: 70% probability
+# PrizePicks: 2x multiplier (implies 50%)
+# Bet: $100
+
+win_prob = 0.70
+loss_prob = 0.30
+win_amount = 100  # Win $100 (2x on $100)
+loss_amount = 100  # Lose $100
+
+EV = (0.70 Ã— 100) - (0.30 Ã— 100)
+EV = 70 - 30 = +$40
+
+# Positive EV = good bet!
+```
+
+---
+
+## ðŸŽ¯ FINAL REMINDERS
+
+1. **Don't rush** - 10 weeks to production is fast enough
+2. **No data leakage** - Temporal discipline is CRITICAL
+3. **Validate first** - Backtest before collecting 8 weeks of data
+4. **Binary vs Continuous** - Model appropriately for each prop
+5. **No ML during collection** - Wait until Week 10
+6. **Paper trade in learning mode** - Real money only after validation
+7. **Feature importance** - Track what actually matters
+8. **Calibration** - Probabilities must match reality
+9. **Retraining** - Only after initial validation complete
+10. **Trust the process** - This will work if done right
+
+---
+
+**Last Updated:** November 4, 2025  
+**Version:** 2.0  
+**Status:** ðŸ“‹ Planning Complete â†’ ðŸ”¨ Ready to Build
+
+**Next File to Create:** `config.py` (system configuration)  
+**Next Task:** Build backtest framework  
+**Timeline:** Week 1 of 10
+
+---
+
+*"Slow is smooth, smooth is fast. We're building this right."* ðŸ«¡
