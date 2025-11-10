@@ -44,12 +44,12 @@ def check_schema():
         
         print(f"REQUIRED (NOT NULL, no default): {len(required_columns)} columns")
         for name, type_ in required_columns:
-            print(f"  âš ï¸  {name} ({type_}) - MUST provide value")
+            print(f"  [WARNING] {name} ({type_}) - MUST provide value")
         print()
-        
+
         print(f"OPTIONAL (nullable or has default): {len(optional_columns)} columns")
         for name, type_ in optional_columns:
-            print(f"  âœ… {name} ({type_})")
+            print(f"  [OK] {name} ({type_})")
         print()
         
         # Check existing predictions
@@ -100,10 +100,10 @@ def check_schema():
         return required_columns
         
     except sqlite3.Error as e:
-        print(f"âŒ Database error: {e}")
+        print(f"[ERROR] Database error: {e}")
         return None
     except Exception as e:
-        print(f"âŒ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     if required:
         print()
         print("="*80)
-        print("âœ… SCHEMA CHECK COMPLETE")
+        print("[OK] SCHEMA CHECK COMPLETE")
         print("="*80)
         print()
         print("Next step: Update statistical_predictions_v2.py to provide ALL required columns")

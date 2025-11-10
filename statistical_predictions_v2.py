@@ -425,7 +425,7 @@ if __name__ == '__main__':
         print('  Insufficient data')
     
     print()
-    print('✅ Test complete - check database for features_json!')
+    print('[OK] Test complete - check database for features_json!')
     print()
     print('Run this to verify:')
     print('  python check_feature_storage.py')

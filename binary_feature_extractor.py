@@ -15,7 +15,7 @@ import sqlite3
 import logging
 from typing import Dict, Optional, Tuple
 from datetime import datetime, timedelta
-import numpy as np
+import math
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -252,13 +252,14 @@ class BinaryFeatureExtractor:
             return 0.5
             
         # Exponential weights (most recent = highest weight)
-        weights = np.exp(-np.arange(len(recent_games)) / 3.0)
-        weights = weights / weights.sum()  # Normalize
-        
+        weights = [math.exp(-i / 3.0) for i in range(len(recent_games))]
+        weights_sum = sum(weights)
+        weights = [w / weights_sum for w in weights]  # Normalize
+
         # Weighted average of successes
-        outcomes = np.array([g['scored_1plus_points'] for g in recent_games])
-        momentum = np.sum(outcomes * weights)
-        
+        outcomes = [g['scored_1plus_points'] for g in recent_games]
+        momentum = sum(o * w for o, w in zip(outcomes, weights))
+
         return float(momentum)
         
     def _validate_temporal_safety(self, 

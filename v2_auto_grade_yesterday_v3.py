@@ -8,10 +8,10 @@ VERSION HISTORY:
 - v3 (THIS FILE): Adds player_game_logs updates for continuous learning
 
 WHAT'S NEW IN V3:
-✅ Saves all player stats to player_game_logs table after grading
-✅ Captures TOI, plus/minus, PIM in addition to points/shots
-✅ Enables feature extractors to use current data (not stale)
-✅ Creates complete feedback loop: predict → grade → update → improve
+[OK] Saves all player stats to player_game_logs table after grading
+[OK] Captures TOI, plus/minus, PIM in addition to points/shots
+[OK] Enables feature extractors to use current data (not stale)
+[OK] Creates complete feedback loop: predict -> grade -> update -> improve
 
 This script:
 1. Finds all predictions for target date
@@ -24,7 +24,9 @@ This script:
 """
 
 import sqlite3
-import requests
+import urllib.request
+import urllib.error
+import json as json_lib
 import sys
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
@@ -93,7 +95,7 @@ def save_player_game_logs_to_db(conn, game_id: str, game_date: str, player_stats
                 ))
                 saved_count += 1
             except Exception as e:
-                print(f'      ⚠️ Could not save {player_name} to player_game_logs: {e}')
+                print(f'      [WARNING] Could not save {player_name} to player_game_logs: {e}')
     
     conn.commit()
     return saved_count
@@ -115,13 +117,14 @@ def fetch_actual_results(game_date: str) -> Dict[str, Dict]:
     try:
         # Get schedule for the date
         schedule_url = f'https://api-web.nhle.com/v1/schedule/{game_date}'
-        response = requests.get(schedule_url, timeout=10)
-        
-        if response.status_code != 200:
-            print(f'❌ Schedule API returned status {response.status_code}')
+        req = urllib.request.Request(schedule_url)
+
+        try:
+            with urllib.request.urlopen(req, timeout=10) as response:
+                schedule_data = json_lib.loads(response.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            print(f'[ERROR] Schedule API returned status {e.code}')
             return player_stats
-            
-        schedule_data = response.json()
         
         # Find games for the target date
         games = []
@@ -150,23 +153,24 @@ def fetch_actual_results(game_date: str) -> Dict[str, Dict]:
             
             # Only process finished games
             if game_state not in ['OFF', 'FINAL']:
-                print(f'    ⚠️ Game not finished yet (state: {game_state})')
+                print(f'    [WARNING] Game not finished yet (state: {game_state})')
                 continue
             
             try:
                 # Get boxscore
                 boxscore_url = f'https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore'
-                box_response = requests.get(boxscore_url, timeout=10)
-                
-                if box_response.status_code != 200:
-                    print(f'    ❌ Boxscore API returned status {box_response.status_code}')
+                box_req = urllib.request.Request(boxscore_url)
+
+                try:
+                    with urllib.request.urlopen(box_req, timeout=10) as box_response:
+                        boxscore = json_lib.loads(box_response.read().decode('utf-8'))
+                except urllib.error.HTTPError as e:
+                    print(f'    [ERROR] Boxscore API returned status {e.code}')
                     continue
-                
-                boxscore = box_response.json()
                 
                 # Extract player stats from boxscore
                 if 'playerByGameStats' not in boxscore:
-                    print(f'    ⚠️ No player stats in boxscore')
+                    print(f'    [WARNING] No player stats in boxscore')
                     continue
                 
                 player_by_game = boxscore['playerByGameStats']
@@ -265,16 +269,16 @@ def fetch_actual_results(game_date: str) -> Dict[str, Dict]:
                 conn.close()
                 
                 player_count = len(away_players) + len(home_players)
-                print(f'    ✅ Fetched stats for {player_count} players (💾 saved {saved} to player_game_logs)')
+                print(f'    [OK] Fetched stats for {player_count} players ([SAVE] saved {saved} to player_game_logs)')
                 
             except Exception as e:
-                print(f'    ❌ Error fetching game {game_id}: {e}')
+                print(f'    [ERROR] Error fetching game {game_id}: {e}')
                 continue
         
         print(f'Found stats for {len(player_stats)} players total')
         
     except Exception as e:
-        print(f'❌ Error fetching results: {e}')
+        print(f'[ERROR] Error fetching results: {e}')
     
     return player_stats
 
@@ -450,7 +454,7 @@ def grade_predictions(game_date: str) -> Dict:
         elif prop_type == 'goals':
             actual_value = actual['goals']
         else:
-            print(f'⚠️ Unknown prop type: {prop_type}')
+            print(f'[WARNING] Unknown prop type: {prop_type}')
             continue
         
         # Determine outcome
@@ -511,7 +515,7 @@ def grade_predictions(game_date: str) -> Dict:
     # Show not found examples if any
     if not_found_count > 0:
         print()
-        print(f'⚠️ {not_found_count} predictions could not be matched to player stats')
+        print(f'[WARNING] {not_found_count} predictions could not be matched to player stats')
         if not_found_examples:
             print(f'Examples: {", ".join(not_found_examples[:5])}')
             if not_found_count > 5:
@@ -582,7 +586,7 @@ def print_grading_report(results: Dict, game_date: str):
     # Sample of results
     print('Sample Results (first 10):')
     for result in results['graded'][:10]:
-        emoji = '✅' if result['outcome'] == 'HIT' else '❌'
+        emoji = '[OK]' if result['outcome'] == 'HIT' else '[ERROR]'
         print(f'  {emoji} {result["player"]} ({result["team"]}): {result["prop"]} - '
               f'Predicted {result["predicted"]:.1%}, Actual {result["actual"]} - {result["outcome"]}')
     
@@ -629,7 +633,7 @@ def main():
             matched = total_checked - match_stats.get('not_found', 0)
             match_rate = matched / total_checked if total_checked > 0 else 0
             
-            message = f"""**✅ GRADING COMPLETE - {target_date}**
+            message = f"""**[OK] GRADING COMPLETE - {target_date}**
 
 Overall: {results['hits']}/{results['total']} ({accuracy:.1%})
 Name matching: {matched}/{total_checked} ({match_rate:.1%})
@@ -652,7 +656,7 @@ By Prop Type:
         
         return 0
     else:
-        print('❌ Grading failed or no predictions to grade')
+        print('[ERROR] Grading failed or no predictions to grade')
         return 1
 
 
