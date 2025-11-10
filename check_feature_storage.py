@@ -40,13 +40,13 @@ def check_feature_storage():
             try:
                 features = json.loads(features_json)
                 feature_count = len(features)
-                print(f'   ✅ HAS {feature_count} FEATURES STORED')
+                print(f'   [OK] HAS {feature_count} FEATURES STORED')
                 print(f'   Sample features: {list(features.keys())[:5]}')
                 has_features = True
             except json.JSONDecodeError:
-                print(f'   ⚠️  Has data but invalid JSON: {features_json[:50]}')
+                print(f'   [WARNING] Has data but invalid JSON: {features_json[:50]}')
         else:
-            print(f'   ❌ NULL - NO FEATURES STORED')
+            print(f'   [ERROR] NULL - NO FEATURES STORED')
             missing_features = True
         
         print()
@@ -58,11 +58,11 @@ def check_feature_storage():
     print()
     
     if has_features and not missing_features:
-        print('✅ FEATURES ARE BEING SAVED!')
+        print('[OK] FEATURES ARE BEING SAVED!')
         print('   Your system is ready for ML training in Week 10.')
         print()
     elif missing_features and not has_features:
-        print('❌ FEATURES ARE NOT BEING SAVED!')
+        print('[ERROR] FEATURES ARE NOT BEING SAVED!')
         print('   CRITICAL: You need to fix this before continuing.')
         print('   Without features, you cannot train ML models in Week 10.')
         print()
@@ -72,7 +72,7 @@ def check_feature_storage():
         print('   3. Regenerate predictions with --force flag')
         print()
     else:
-        print('⚠️  MIXED RESULTS - Some predictions have features, some don\'t')
+        print('[WARNING] MIXED RESULTS - Some predictions have features, some don\'t')
         print('   This suggests you recently added feature storage.')
         print('   Older predictions won\'t have features, but new ones will.')
         print()

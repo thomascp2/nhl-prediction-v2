@@ -20,7 +20,7 @@ import sqlite3
 import logging
 from typing import Dict, Optional, Tuple, List
 from datetime import datetime
-import numpy as np
+import math
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -176,7 +176,7 @@ class ContinuousFeatureExtractor:
             return 2.5
             
         shots = [g['shots_on_goal'] for g in games_subset]
-        return float(np.mean(shots))
+        return float(sum(shots) / len(shots))
         
     def _calc_std_dev(self, games: List[Dict], window: Optional[int] = None) -> float:
         """
@@ -200,9 +200,12 @@ class ContinuousFeatureExtractor:
             
         if len(games_subset) < 2:
             return 1.2
-            
+
         shots = [g['shots_on_goal'] for g in games_subset]
-        return max(float(np.std(shots)), 0.5)  # Minimum 0.5 std dev
+        mean = sum(shots) / len(shots)
+        variance = sum((x - mean) ** 2 for x in shots) / len(shots)
+        std_dev = math.sqrt(variance)
+        return max(float(std_dev), 0.5)  # Minimum 0.5 std dev
         
     def _calc_trend(self, games: List[Dict]) -> float:
         """
@@ -226,26 +229,26 @@ class ContinuousFeatureExtractor:
         
         # Reverse so oldest is first for regression
         shots = shots[::-1]
-        
+
         # Simple linear regression
-        x = np.arange(len(shots))
-        
+        x = list(range(len(shots)))
+
         # Calculate slope
-        x_mean = np.mean(x)
-        y_mean = np.mean(shots)
-        
-        numerator = np.sum((x - x_mean) * (shots - y_mean))
-        denominator = np.sum((x - x_mean) ** 2)
-        
+        x_mean = sum(x) / len(x)
+        y_mean = sum(shots) / len(shots)
+
+        numerator = sum((xi - x_mean) * (yi - y_mean) for xi, yi in zip(x, shots))
+        denominator = sum((xi - x_mean) ** 2 for xi in x)
+
         if denominator == 0:
             return 0.0
-            
+
         slope = numerator / denominator
-        
+
         # Normalize to -1 to +1 range
         # Typical slope range is -0.5 to +0.5 per game
-        normalized_trend = np.tanh(slope / 0.3)
-        
+        normalized_trend = math.tanh(slope / 0.3)
+
         return float(normalized_trend)
         
     def _calc_avg_toi(self, games: List[Dict]) -> float:
@@ -269,8 +272,8 @@ class ContinuousFeatureExtractor:
         
         if not toi_values:
             return 15.0
-            
-        return float(np.mean(toi_values))
+
+        return float(sum(toi_values) / len(toi_values))
         
     def _validate_temporal_safety(self,
                                   games: List[Dict],

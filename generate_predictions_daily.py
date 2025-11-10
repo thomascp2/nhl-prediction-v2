@@ -100,11 +100,11 @@ def fetch_game_schedule(target_date: str) -> bool:
         )
         
         if result.returncode == 0:
-            print("✅ Game schedule fetched successfully!")
+            print("[OK] Game schedule fetched successfully!")
             print()
             return True
         else:
-            print(f"⚠️  Warning: Game schedule fetch returned code {result.returncode}")
+            print(f"[WARNING] Warning: Game schedule fetch returned code {result.returncode}")
             if result.stdout:
                 print("Output:", result.stdout[-500:])  # Last 500 chars
             if result.stderr:
@@ -113,16 +113,16 @@ def fetch_game_schedule(target_date: str) -> bool:
             return False
             
     except subprocess.TimeoutExpired:
-        print("❌ Error: Game schedule fetch timed out")
+        print("[ERROR] Error: Game schedule fetch timed out")
         print()
         return False
     except FileNotFoundError:
-        print("❌ Error: fetch_game_schedule_FINAL.py not found")
+        print("[ERROR] Error: fetch_game_schedule_FINAL.py not found")
         print("   Make sure it's in the same directory")
         print()
         return False
     except Exception as e:
-        print(f"❌ Error fetching game schedule: {e}")
+        print(f"[ERROR] Error fetching game schedule: {e}")
         print()
         return False
 
@@ -205,47 +205,47 @@ def generate_predictions_for_date(target_date: str, force: bool = False) -> int:
     preds_exist, pred_count = check_predictions_exist(target_date)
     
     if preds_exist and not force:
-        print(f"⚠️  PREDICTIONS ALREADY EXIST FOR {target_date}")
+        print(f"[WARNING] PREDICTIONS ALREADY EXIST FOR {target_date}")
         print(f"   Found {pred_count} existing predictions in database")
         print()
         print("   Options:")
-        print("   1. Skip generation (predictions already done) ✅")
+        print("   1. Skip generation (predictions already done) [OK]")
         print("   2. Regenerate with --force flag:")
         print(f"      python generate_predictions_daily.py {target_date} --force")
         print()
-        print("⏭️  Skipping generation - predictions already exist")
+        print("[SKIP] Skipping generation - predictions already exist")
         print()
         return 0
-    
+
     if preds_exist and force:
-        print(f"🔄 FORCE MODE: Deleting {pred_count} existing predictions...")
+        print(f"[FORCE] FORCE MODE: Deleting {pred_count} existing predictions...")
         deleted = delete_existing_predictions(target_date)
-        print(f"   ✅ Deleted {deleted} predictions")
+        print(f"   [OK] Deleted {deleted} predictions")
         print()
     
     # Check if games exist, fetch if not
     games_exist, game_count = check_games_exist(target_date)
     
     if not games_exist:
-        print(f"⚠️  No games found in database for {target_date}")
+        print(f"[WARNING] No games found in database for {target_date}")
         print("   Attempting to fetch game schedule...")
         print()
-        
+
         if not fetch_game_schedule(target_date):
-            print("❌ Failed to fetch game schedule")
+            print("[ERROR] Failed to fetch game schedule")
             print("   Cannot generate predictions without games in database")
             print()
             return 0
-        
+
         # Verify games now exist
         games_exist, game_count = check_games_exist(target_date)
         if not games_exist:
-            print("❌ Still no games found after fetch attempt")
+            print("[ERROR] Still no games found after fetch attempt")
             print("   This likely means no NHL games scheduled for this date")
             print()
             return 0
-    
-    print(f"✅ Found {game_count} games in database for {target_date}")
+
+    print(f"[OK] Found {game_count} games in database for {target_date}")
     print()
     
     # Get games
@@ -397,10 +397,10 @@ def main():
         # Check if predictions exist (skipped) vs error
         preds_exist, pred_count = check_predictions_exist(target_date)
         if preds_exist:
-            print("ℹ️  Predictions already exist - use --force to regenerate")
+            print("[INFO] Predictions already exist - use --force to regenerate")
             return 0  # Success - predictions exist
         else:
-            print("⚠️  No predictions generated")
+            print("[WARNING] No predictions generated")
             print("   Check if:")
             print("   1. Games are scheduled for this date")
             print("   2. Players have sufficient game history (5+ games)")
@@ -428,13 +428,13 @@ def main():
         
         # Success criteria
         if results['unique_probs'] > 10:
-            print("✅ SUCCESS - Predictions generated and verified!")
+            print("[OK] SUCCESS - Predictions generated and verified!")
             print("   Feature variety looks good (not using defaults)")
         else:
-            print("⚠️  WARNING - Low probability variety")
+            print("[WARNING] WARNING - Low probability variety")
             print("   May be using default values - check player history")
     else:
-        print("❌ ERROR - Predictions generated but not found in database")
+        print("[ERROR] ERROR - Predictions generated but not found in database")
     
     print()
     return 0
