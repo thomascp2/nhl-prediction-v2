@@ -30,7 +30,7 @@ import requests
 
 # Configuration
 PROJECT_ROOT = Path(__file__).parent
-DB_PATH = PROJECT_ROOT / "nhl_predictions_v2.db"
+DB_PATH = Path(r"C:\Users\thoma\NHL-Model-Rebuild-V2\database\nhl_predictions_v2.db")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'nhl-prediction-v2-dashboard'
