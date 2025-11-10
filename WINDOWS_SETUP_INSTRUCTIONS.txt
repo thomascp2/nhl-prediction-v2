@@ -1,0 +1,58 @@
+NHL PREDICTION SYSTEM V2 - WINDOWS SETUP INSTRUCTIONS
+=====================================================
+
+You need to manually create the templates folder and index.html file on your Windows machine.
+
+STEP 1: Create the templates folder
+------------------------------------
+In PowerShell at C:\Users\thoma\NHL-Model-Rebuild-V2:
+
+    mkdir templates
+
+STEP 2: Create index.html
+--------------------------
+1. Open Notepad or your preferred text editor
+2. Copy the ENTIRE content from templates/index.html in this repository
+3. Save it as: C:\Users\thoma\NHL-Model-Rebuild-V2\templates\index.html
+
+The index.html file is 1,100+ lines. You can:
+
+OPTION A: Get it from GitHub
+- Go to: https://github.com/thomascp2/nhl-prediction-v2/blob/claude/explore-project-structure-011CUybBQhRjmyF5c3au12wp/templates/index.html
+- Click "Raw" button
+- Copy all content
+- Paste into C:\Users\thoma\NHL-Model-Rebuild-V2\templates\index.html
+
+OPTION B: I can provide the content here (but it's very long)
+
+STEP 3: Verify file structure
+------------------------------
+You should have:
+
+C:\Users\thoma\NHL-Model-Rebuild-V2\
+├── dashboard_app.py          ← Already have this
+├── templates\
+│   └── index.html            ← Need to create this
+├── database\
+│   └── nhl_predictions_v2.db ← Already have this
+└── (other Python scripts)
+
+STEP 4: Install dependencies
+-----------------------------
+In PowerShell:
+
+    pip install Flask requests
+
+STEP 5: Run the dashboard
+--------------------------
+    python dashboard_app.py
+
+Then open browser to: http://localhost:5000
+
+ALTERNATIVE: Install Git for Windows
+-------------------------------------
+If you want to use git commands in the future:
+1. Download Git for Windows: https://git-scm.com/download/win
+2. Install it
+3. Restart PowerShell
+4. Then you can use: git fetch, git pull, etc.
