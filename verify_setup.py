@@ -61,7 +61,7 @@ def verify_configs():
     print(f"{'='*60}")
 
     # Add NFL system to path
-    nfl_path = Path(r"C:\Users\thoma\NFL-prediciton model v1")
+    nfl_path = Path(r"C:\Users\thoma\NFL-Model-v1")
     if nfl_path.exists():
         sys.path.insert(0, str(nfl_path))
         try:
@@ -81,7 +81,7 @@ def verify_configs():
         nfl_db_path = None
 
     # Add MLB system to path
-    mlb_path = Path(r"C:\Users\thoma\MLB Prediciton Model")
+    mlb_path = Path(r"C:\Users\thoma\MLB-Model-v1")
     if mlb_path.exists():
         sys.path.insert(0, str(mlb_path))
         try:

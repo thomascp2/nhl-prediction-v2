@@ -12,7 +12,7 @@ from pathlib import Path
 
 # Project root - UPDATE THIS PATH for your local machine
 # For Windows: Use raw string (r"...") or forward slashes
-NFL_ROOT = Path(r"C:\Users\thoma\NFL-prediciton model v1")
+NFL_ROOT = Path(r"C:\Users\thoma\NFL-Model-v1")
 
 # Database path
 DB_PATH = str(NFL_ROOT / "database" / "nfl_predictions.db")

@@ -17,7 +17,7 @@ def test_nfl_fetchers():
     print("🏈 TESTING NFL DATA FETCHERS")
     print("="*70)
 
-    nfl_path = Path(r"C:\Users\thoma\NFL-prediciton model v1")
+    nfl_path = Path(r"C:\Users\thoma\NFL-Model-v1")
     if not nfl_path.exists():
         print(f"❌ NFL directory not found: {nfl_path}")
         return False
@@ -77,7 +77,7 @@ def test_mlb_fetchers():
     print("⚾ TESTING MLB DATA FETCHERS")
     print("="*70)
 
-    mlb_path = Path(r"C:\Users\thoma\MLB Prediciton Model")
+    mlb_path = Path(r"C:\Users\thoma\MLB-Model-v1")
     if not mlb_path.exists():
         print(f"❌ MLB directory not found: {mlb_path}")
         return False
